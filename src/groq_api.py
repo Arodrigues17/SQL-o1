@@ -90,25 +90,22 @@ def beam_search(input: str) -> List[Tuple[str, float]]:
     Generate multiple responses using beam search and return them with scores
     """
     try:
-        # Use chat completion for better instruction following
-        response = groq_client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": input}],
-            temperature=0.9,
-            max_tokens=1024,
-            n=3,  # Generate 3 completions
-        )
-        
-        results = []
-        for i, choice in enumerate(response.choices):
-            content = choice.message.content
-            # Calculate a score for this completion
-            score_value = calculate_score(f"user\n\n{input}assistant\n\n", content)
-            results.append((content, score_value))
-            print(f"Generated Text {i+1} (Score: {score_value:.4f}):\n{content}\n")
-            
-        return results
-        
+        # Groq API only allows n=1. If you want multiple completions, call the API multiple times.
+        completions = []
+        num_completions = 3  # mimic original behavior, but do 3 separate calls
+        for _ in range(num_completions):
+            response = groq_client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": input}],
+                temperature=0.9,
+                max_tokens=1024,
+                n=1,
+            )
+            if response.choices:
+                content = response.choices[0].message.content
+                score_value = calculate_score(f"user\n\n{input}assistant\n\n", content)
+                completions.append((content, score_value))
+        return completions
     except Exception as e:
         print(f"Error in beam search: {e}")
         return [("An error occurred during generation.", -100.0)]
