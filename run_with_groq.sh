@@ -179,11 +179,26 @@ for CURRENT_MODE in "${MODES[@]}"; do
     echo "========================================================"
     echo "Preprocessing data for $CURRENT_MODE mode..."
     echo "========================================================"
-    
+
+    # Determine expected intermediate file for this mode
     if [ "$CURRENT_MODE" == "train" ]; then
-        python preprocess_data.py --dataset "$DATASET_VARIANT" --mode "$CURRENT_MODE" --LLM_model "$GROQ_MODEL" --PSG --data_path "$DATA_PATH" --output_path "$OUTPUT_PATH"
+        PREPROCESS_FILE="./dataset/SQL-o1_spider_train_0_psg.json"
+    elif [ "$CURRENT_MODE" == "dev" ]; then
+        PREPROCESS_FILE="./dataset/SQL-o1_spider_dev_0_psg.json"
+    elif [ "$CURRENT_MODE" == "test" ]; then
+        PREPROCESS_FILE="./dataset/SQL-o1_spider_test_0_psg.json"
     else
-        python preprocess_data.py --dataset "$DATASET_VARIANT" --mode "$CURRENT_MODE" --LLM_model "$GROQ_MODEL" --data_path "$DATA_PATH" --output_path "$OUTPUT_PATH"
+        PREPROCESS_FILE=""
+    fi
+
+    if [ -n "$PREPROCESS_FILE" ] && [ -f "$PREPROCESS_FILE" ]; then
+        echo "Preprocessing skipped: $PREPROCESS_FILE already exists."
+    else
+        if [ "$CURRENT_MODE" == "train" ]; then
+            python preprocess_data.py --dataset "$DATASET_VARIANT" --mode "$CURRENT_MODE" --LLM_model "$GROQ_MODEL" --PSG --data_path "$DATA_PATH" --output_path "$OUTPUT_PATH"
+        else
+            python preprocess_data.py --dataset "$DATASET_VARIANT" --mode "$CURRENT_MODE" --LLM_model "$GROQ_MODEL" --data_path "$DATA_PATH" --output_path "$OUTPUT_PATH"
+        fi
     fi
     
     # Set output paths based on mode and dataset
