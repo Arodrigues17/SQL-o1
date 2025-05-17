@@ -157,3 +157,4 @@ controller*
 Self_Planning/Tool_Selection/UIE_Tools
 data_agent/*
 datasets_uie_processed_agent/*
+/dataset/spider

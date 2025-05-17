@@ -8,7 +8,7 @@ import re
 import sqlite3
 import traceback
 import os
-from vllm import LLM, SamplingParams
+import requests
 from func_timeout import func_set_timeout
 import func_timeout
 import tqdm
@@ -44,76 +44,55 @@ def read_json_file(file_path):
         return None
 
 
-class LLM_Model(object):
-    def __init__(self, model=''):
-
+class GroqAPIClient(object):
+    def __init__(self, api_url="http://localhost:8000/llm", model=None):
+        self.api_url = api_url
         self.model = model
-        model = model.lower().replace('_', '').replace('-', '')
-        if 'qwen2' in model:
-            self.tag = 'qwen2'
-        elif 'llama3' in model:
-            self.tag = 'llama3'
-        elif 'llama2' in model:
-            self.tag = 'llam2'
-        elif 'deepseek' in model:
-            self.tag = 'deepseek'
-        elif 'mistral' in model:
-            self.tag = 'mistral'
-        elif 'codellama' in model:
-            self.tag = 'codellama'
-        else:
-            raise TypeError(f"Unexpect model: {model}.")
-
-        self.llm = LLM(model=self.model,
-                       seed=123,
-                       tensor_parallel_size=args.gpus,
-                       trust_remote_code=True,
-                       gpu_memory_utilization=0.9
-                       )
-        self.tokenizer = self.llm.get_tokenizer()
 
     def generate_response(self, prompts, max_tokens=1024, temperature=0.01, top_p=0.5):
-        sampling_params = SamplingParams(temperature=temperature, top_p=top_p, max_tokens=max_tokens,
-                                         skip_special_tokens=True, stop=self.tokenizer.eos_token)
-        if self.tag in ['mistral']:
-            messages_list = [[{"role": "user", "content": p}] for p in prompts]
-        else:
-            messages_list = [
-                [{"role": "system", "content": "You are a helpful SQLite assistant."}, {"role": "user", "content": p}]
-                for p in prompts]
-        messages_list = self.tokenizer.apply_chat_template(messages_list, add_generation_prompt=True, tokenize=False)
-        outputs = self.llm.generate(messages_list, sampling_params)
-        return [output.outputs[0].text for output in outputs]
-
-
-class LLM_Online(object):
-    def __init__(self, model="qwen72b", device=[0]):
-        None
-
-    def generate_response(self, prompts):
-        rs = []
+        # Always use the Groq API server for completions
+        results = []
         for prompt in tqdm.tqdm(prompts):
-            res = None  # your online LLM
-            rs.append(res)
-        return rs
+            payload = {
+                "input": prompt,
+                "output": []
+            }
+            try:
+                response = requests.post(self.api_url, json=payload)
+                response.raise_for_status()
+                completions = response.json()
+                # completions is a list of (text, score) tuples; take the first text
+                if isinstance(completions, list) and len(completions) > 0:
+                    if isinstance(completions[0], list) or isinstance(completions[0], tuple):
+                        results.append(completions[0][0])
+                    elif isinstance(completions[0], str):
+                        results.append(completions[0])
+                    else:
+                        results.append(str(completions[0]))
+                else:
+                    results.append("")
+            except Exception as e:
+                print(f"Groq API error: {e}")
+                results.append("")
+        return results
 
 
 def parse_dataset(data_path, mode='dev', dataset='bird'):
     # redirect path
     data_tuples_path = ''
     if dataset == 'bird':
-        # data_tuples_path = os.path.join(data_path, dataset, mode, f'{mode}.json')
         data_tuples_path = os.path.join(data_path, dataset, mode, f'{mode}.json')
     elif 'spider_DK' == dataset:
         data_tuples_path = os.path.join(data_path, 'spider', 'Spider_DK.json')
     elif 'spider_real' == dataset:
         data_tuples_path = os.path.join(data_path, 'spider', 'spider-realistic.json')
-
     elif 'spider_syn' == dataset:
         data_tuples_path = os.path.join(data_path, 'spider', 'dev.json')
     elif 'spider' in dataset:
         if mode == 'test':
             data_tuples_path = os.path.join(data_path, 'spider', 'test.json')
+        elif mode == 'train':
+            data_tuples_path = os.path.join(data_path, 'spider', 'train_spider.json')
         else:
             data_tuples_path = os.path.join(data_path, 'spider', f'{mode}.json')
     else:
@@ -499,13 +478,6 @@ def eval_all(args):
         kk = 10
     kkkkk = 1 if dataset == 'bird' else 3
 
-    if 'online' in args.tag:
-        generator = LLM_Online()
-    else:
-        generator = LLM_Model(args.LLM_model)
-    tag = args.tag
-
-
     # generate SQL
     if True:
         sql_results = []
@@ -628,7 +600,7 @@ def eval_all(args):
 
                 db_id = batch_prompts[j][4]
                 prompt = final_prompts[j]
-                print(f"=={start + j + 1}/{len(data_tuples)}=={db_id}=={tag}==================")
+                print(f"=={start + j + 1}/{len(data_tuples)}=={db_id}=={args.tag}==================")
 
                 try:
                     if dataset == 'spider':
@@ -686,18 +658,18 @@ def eval_all(args):
 
 
         if args.PSG:
-            filename = os.path.join(args.output_path, f"{tag}_{dataset}_{mode}_{args.flags}_psg.json")
+            filename = os.path.join(args.output_path, f"{args.tag}_{dataset}_{mode}_{args.flags}_psg.json")
 
             with open(filename, mode='w',encoding='utf-8') as file:
                 json.dump(prompts_collection, file, ensure_ascii=False, indent=4)
         else:
-            filename = os.path.join(args.output_path, f"{tag}_{dataset}_{mode}_{args.flags}.json")
+            filename = os.path.join(args.output_path, f"{args.tag}_{dataset}_{mode}_{args.flags}.json")
 
             with open(filename, mode='w',encoding='utf-8') as file:
                 json.dump(prompts_collection, file, ensure_ascii=False, indent=4)
 
         if prompts_collection_db:
-            filename = os.path.join(args.output_path, f"{tag}_{dataset}_{mode}_db_id_{args.flags}.json")
+            filename = os.path.join(args.output_path, f"{args.tag}_{dataset}_{mode}_db_id_{args.flags}.json")
             with open(filename, mode='w', encoding='utf-8') as file:
                 json.dump(prompts_collection_db, file, ensure_ascii=False, indent=4)
 
@@ -744,10 +716,10 @@ if __name__ == "__main__":
     parser.add_argument("--gpus", default=4, type=int)
     parser.add_argument("--eval_sft", default=1, type=int)
     parser.add_argument("--flags", default='0', type=str)
-    # parser.add_argument("--LLM_model", default='meta-llama/Llama-3-8B-Instruct', type=str)
-    parser.add_argument("--LLM_model", default='/data/vda/saves/llama3-8b', type=str)
+    parser.add_argument("--LLM_model", default='llama-3-1-8b-instant-128k', type=str)
     parser.add_argument("--batch_size", default=32, type=int)
     args = parser.parse_args()
-    usegpu(need_gpu_count=args.gpus)
     print(args)
+    # Always use Groq API client
+    generator = GroqAPIClient(model=args.LLM_model)
     eval_all(args)
