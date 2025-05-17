@@ -271,8 +271,13 @@ class AgentConfig(SearchConfig):
                 else:
                     return True
 
-            sql_completions = [key for key in output.keys() if is_valid_string(key)]
-            # sql_completions = [self.normalize_sql(key) for key in output.keys() if is_valid_string(key)]
+            # Patch: handle both dict and list for output
+            if isinstance(output, dict):
+                sql_completions = [key for key in output.keys() if is_valid_string(key)]
+            elif isinstance(output, list):
+                sql_completions = [item for item in output if is_valid_string(item)]
+            else:
+                sql_completions = []
 
             actions = set([
                 (
@@ -358,5 +363,5 @@ def visualize_mcts_save(result_rap):
             edge_data_factory=blocksworld_edge_data_factory)  
     
 def visualize_mcts_out(data):
-    visualize_out(data) 
+    visualize_out(data)
 

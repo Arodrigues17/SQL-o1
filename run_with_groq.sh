@@ -230,23 +230,26 @@ for CURRENT_MODE in "${MODES[@]}"; do
     echo "========================================================"
     echo "Validating results for $CURRENT_MODE mode..."
     echo "========================================================"
-    
+
     # Make sure the paths exist
     check_directory "$DB_PATH"
-    
+
+    # Use per-mode MCTS result file for validation
+    VALIDATION_JSON_PATH="./mcts_results/${TASK_NAME}_mcts_${CURRENT_MODE}.json"
+
     echo "Running validation with the following parameters:"
-    echo "JSON Path: ./mcts_results/${TASK_NAME}_mcts_${CURRENT_MODE}.json"
+    echo "JSON Path: $VALIDATION_JSON_PATH"
     echo "DB Root Path: $DB_PATH"
     echo "Diff JSON Path: $DIFF_PATH"
     echo "Output File: $OUTPUT_FILE"
-    
+
     python validation_results.py \
-        --json_path "./mcts_results/${TASK_NAME}_mcts_${CURRENT_MODE}.json" \
+        --json_path "$VALIDATION_JSON_PATH" \
         --db_root_path "$DB_PATH" \
         --num_cpus 1 \
         --diff_json_path "$DIFF_PATH" \
         --output_file "$OUTPUT_FILE"
-    
+
     echo "========================================================"
     echo "Completed processing mode: $CURRENT_MODE"
     echo "Results saved to: $OUTPUT_FILE"
