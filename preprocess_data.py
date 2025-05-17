@@ -12,6 +12,7 @@ import requests
 from func_timeout import func_set_timeout
 import func_timeout
 import tqdm
+import difflib
 
 prompt_cw_temp_sft = """Given the following database schema and question, your task is to write a valid SQL query whose execution will accurately answer the question. If the value below the incomplete SQL query is not empty, your task is to complete it into a full SQL query. Remember to end the query with a semicolom ```;```.
 
@@ -452,6 +453,37 @@ def replace_syn(data1, data2):
     return data1
 
 
+def extract_schema_links(question, schema_dict):
+    """
+    For a given question and schema, return a list of matched columns and tables.
+    Uses exact and fuzzy matching.
+    Returns: (linked_columns, linked_tables)
+    """
+    question_lower = question.lower()
+    linked_columns = set()
+    linked_tables = set()
+    # Exact match
+    for table in schema_dict['tables']:
+        if table.lower() in question_lower:
+            linked_tables.add(table)
+        for col in schema_dict['tables'][table]:
+            if col.lower() in question_lower:
+                linked_columns.add((table, col))
+    # Fuzzy match (if not found by exact)
+    question_tokens = set(question_lower.split())
+    for table in schema_dict['tables']:
+        if table not in linked_tables:
+            for token in question_tokens:
+                if difflib.SequenceMatcher(None, token, table.lower()).ratio() > 0.8:
+                    linked_tables.add(table)
+        for col in schema_dict['tables'][table]:
+            if (table, col) not in linked_columns:
+                for token in question_tokens:
+                    if difflib.SequenceMatcher(None, token, col.lower()).ratio() > 0.8:
+                        linked_columns.add((table, col))
+    return list(linked_columns), list(linked_tables)
+
+
 def eval_all(args):
     dataset = args.dataset
     mode = args.mode
@@ -506,11 +538,20 @@ def eval_all(args):
             database_schema, examples = get_schmea_str_and_examples(schema_dict)
             schema_dict_ = schema_dict
 
+            # --- Enhanced schema linking ---
+            linked_columns, linked_tables = extract_schema_links(question, schema_dict)
+            # Format as tags
+            col_tags = ' '.join([f"<col>{col}</col>" for _, col in linked_columns])
+            tab_tags = ' '.join([f"<tab>{tab}</tab>" for tab in linked_tables])
+            schema_linking_context = f"Schema links: {col_tags} {tab_tags}" if (col_tags or tab_tags) else ""
+            # ---
+
             if dataset == 'bird':
                 prompt = [question, schema_dict,
                           f"\n\n/* Question hint */\n{row['evidence']}" if row['evidence'] != '' else '', schema_dict_]
             else:
-                prompt = [question, schema_dict, '', schema_dict_]
+                # Insert schema linking context into the prompt
+                prompt = [question + "\n" + schema_linking_context, schema_dict, '', schema_dict_]
             prompts.append([database_schema, str(examples), question, row['SQL'], db_id, prompt, db_path])
 
         n_samples = len(data_tuples)
