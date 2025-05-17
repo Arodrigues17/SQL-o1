@@ -59,7 +59,11 @@ def run_text2sql():
         file_path = './dataset/SQL-o1_bird_dev_db_id_0.json'
 
     elif args.task_name == "spider":
-        file_path = './dataset/SQL-o1_spider_dev_db_id_0.json'
+        # Use the PSG file for train mode
+        if os.path.exists('./dataset/SQL-o1_spider_train_0_psg.json'):
+            file_path = './dataset/SQL-o1_spider_train_0_psg.json'
+        else:
+            file_path = './dataset/SQL-o1_spider_dev_db_id_0.json'
 
     elif args.task_name == "spider_syn":
         file_path = './dataset/SQL-o1_syn_spider_db_id_0.json'

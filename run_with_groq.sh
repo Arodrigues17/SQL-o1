@@ -18,9 +18,12 @@ if [ -z "$GROQ_API_KEY" ]; then
     exit 1
 fi
 
-# Function to prompt user for input
+# Function to prompt user for input with default
 prompt_user() {
-    read -p "$1: " var
+    local prompt_text="$1"
+    local default_value="$2"
+    read -p "$prompt_text [$default_value]: " var
+    var="${var:-$default_value}"
     echo $var
 }
 
@@ -40,7 +43,7 @@ cd "$SCRIPT_DIR"
 echo "Which dataset do you want to work with?"
 echo "1) Spider"
 echo "2) Bird"
-DATASET_CHOICE=$(prompt_user "Enter your choice (1/2)")
+DATASET_CHOICE=$(prompt_user "Enter your choice (1/2)" "1")
 
 if [ "$DATASET_CHOICE" == "1" ]; then
     DATASET="spider"
@@ -59,7 +62,7 @@ echo "1) Train"
 echo "2) Dev"
 echo "3) Test (Spider only)"
 echo "4) All (Run Train, Dev, and Test sequentially)"
-MODE_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)")
+MODE_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)" "4")
 
 if [ "$MODE_CHOICE" == "1" ]; then
     MODE="train"
@@ -104,7 +107,7 @@ if [ "$DATASET" == "spider" ]; then
     echo "2) Spider Realistic"
     echo "3) Spider DK"
     echo "4) Spider Syn"
-    VARIANT_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)")
+    VARIANT_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)" "1")
     
     if [ "$VARIANT_CHOICE" == "1" ]; then
         DATASET_VARIANT="spider"
@@ -131,7 +134,7 @@ echo "1) llama-3-1-8b-instant-128k (Llama 3.1 8B Instant 128k)"
 echo "2) llama-3-3-70b-versatile-128k (Llama 3.3 70B Versatile 128k)"
 echo "3) mixtral-8x7b-32768 (Mixtral 8x7B)"
 echo "4) gemma-7b-it (Gemma 7B)"
-MODEL_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)")
+MODEL_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)" "1")
 
 if [ "$MODEL_CHOICE" == "1" ]; then
     GROQ_MODEL="llama-3-1-8b-instant-128k"
