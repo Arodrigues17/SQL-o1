@@ -236,10 +236,26 @@ for CURRENT_MODE in "${MODES[@]}"; do
     EXPLORE_PID=$!
     echo "MCTS Exploration started with PID: $EXPLORE_PID"
     
-    # Wait for exploration to complete
+    # Wait for exploration to complete with a live progress bar
+    LOG_FILE="result_mcts_groq_${TASK_NAME}_${CURRENT_MODE}.txt"
     echo "Waiting for MCTS Exploration to complete. This might take a while..."
-    wait $EXPLORE_PID
-    echo "MCTS Exploration completed!"
+    while kill -0 $EXPLORE_PID 2>/dev/null; do
+        if [ -f "$LOG_FILE" ]; then
+            # Try to extract the latest progress line
+            PROGRESS_LINE=$(grep -oP '==\d+/\d+==' "$LOG_FILE" | tail -n1)
+            if [[ $PROGRESS_LINE =~ ==([0-9]+)/([0-9]+)== ]]; then
+                DONE=${BASH_REMATCH[1]}
+                TOTAL=${BASH_REMATCH[2]}
+                if [ "$TOTAL" -gt 0 ]; then
+                    PERCENT=$(( 100 * DONE / TOTAL ))
+                    echo -ne "\rWaiting for MCTS Exploration to complete: $PERCENT%"
+                fi
+            fi
+        fi
+        sleep 5
+    done
+    echo -e "\rWaiting for MCTS Exploration to complete: 100%"
+    echo "\nMCTS Exploration completed!"
     
     # Validate results
     echo "========================================================"
