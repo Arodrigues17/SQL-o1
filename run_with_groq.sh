@@ -137,16 +137,16 @@ echo "4) gemma-7b-it (Gemma 7B)"
 MODEL_CHOICE=$(prompt_user "Enter your choice (1/2/3/4)" "1")
 
 if [ "$MODEL_CHOICE" == "1" ]; then
-    GROQ_MODEL="llama-3-1-8b-instant-128k"
+    GROQ_MODEL="llama-3.1-8b-instant"
 elif [ "$MODEL_CHOICE" == "2" ]; then
-    GROQ_MODEL="llama-3-3-70b-versatile-128k"
+    GROQ_MODEL="llama-3-70b-8192"
 elif [ "$MODEL_CHOICE" == "3" ]; then
     GROQ_MODEL="mixtral-8x7b-32768"
 elif [ "$MODEL_CHOICE" == "4" ]; then
     GROQ_MODEL="gemma-7b-it"
 else
-    echo "Invalid model choice. Using llama-3-1-8b-instant-128k."
-    GROQ_MODEL="llama-3-1-8b-instant-128k"
+    echo "Invalid model choice. Using llama-3.1-8b-instant."
+    GROQ_MODEL="llama-3.1-8b-instant"
 fi
 
 export GROQ_MODEL="$GROQ_MODEL"
@@ -227,35 +227,24 @@ for CURRENT_MODE in "${MODES[@]}"; do
     echo "Running MCTS Exploration for $CURRENT_MODE mode..."
     echo "========================================================"
     
-    TASK_NAME="$DATASET_VARIANT"
-    if [ "$CURRENT_MODE" == "test" ]; then
-        TASK_NAME="${DATASET_VARIANT}_test"
-    fi
+    TASK_NAME="${DATASET_VARIANT}_${CURRENT_MODE}"
     
-    nohup python _run_explore.py --task_name "$TASK_NAME" > "result_mcts_groq_${TASK_NAME}_${CURRENT_MODE}.txt" 2>&1 &
+    LOG_FILE="result_mcts_groq_${TASK_NAME}.txt"
+    nohup python _run_explore.py --task_name "$TASK_NAME" > "$LOG_FILE" 2>&1 &
     EXPLORE_PID=$!
     echo "MCTS Exploration started with PID: $EXPLORE_PID"
-    
-    # Wait for exploration to complete with a live progress bar
-    LOG_FILE="result_mcts_groq_${TASK_NAME}_${CURRENT_MODE}.txt"
-    echo "Waiting for MCTS Exploration to complete. This might take a while..."
-    while kill -0 $EXPLORE_PID 2>/dev/null; do
-        if [ -f "$LOG_FILE" ]; then
-            # Try to extract the latest progress line
-            PROGRESS_LINE=$(grep -oP '==\d+/\d+==' "$LOG_FILE" | tail -n1)
-            if [[ $PROGRESS_LINE =~ ==([0-9]+)/([0-9]+)== ]]; then
-                DONE=${BASH_REMATCH[1]}
-                TOTAL=${BASH_REMATCH[2]}
-                if [ "$TOTAL" -gt 0 ]; then
-                    PERCENT=$(( 100 * DONE / TOTAL ))
-                    echo -ne "\rWaiting for MCTS Exploration to complete: $PERCENT%"
-                fi
-            fi
-        fi
-        sleep 5
-    done
-    echo -e "\rWaiting for MCTS Exploration to complete: 100%"
-    echo "\nMCTS Exploration completed!"
+
+    # Show real-time progress by tailing the log file
+    echo "Showing real-time MCTS progress (Ctrl+C to hide, does not stop the process)..."
+    tail -f "$LOG_FILE" | grep --line-buffered '==[0-9]*/[0-9]*==' &
+    TAIL_PID=$!
+
+    # Wait for exploration to complete
+    wait $EXPLORE_PID
+    echo "MCTS Exploration completed!"
+
+    # Stop tailing progress
+    kill $TAIL_PID 2>/dev/null || true
     
     # Validate results
     echo "========================================================"
@@ -285,6 +274,56 @@ for CURRENT_MODE in "${MODES[@]}"; do
     echo "Completed processing mode: $CURRENT_MODE"
     echo "Results saved to: $OUTPUT_FILE"
     echo "========================================================"
+
+    # Evaluate with Spider test suite if .sql file exists
+    if [ -f "$OUTPUT_FILE" ]; then
+        echo "========================================================"
+        echo "Fixing SQL file format to ensure compatibility with evaluation..."
+        echo "========================================================"
+        if [ "$CURRENT_MODE" == "dev" ]; then
+            GOLD_FILE="./dataset/spider/dev_gold.sql"
+            DB_DIR="./dataset/spider/database"
+            TABLE_FILE="./dataset/spider/tables.json"
+            MCTS_RESULT="./mcts_results/spider_mcts_dev.json"
+        elif [ "$CURRENT_MODE" == "test" ]; then
+            GOLD_FILE="./dataset/spider/test_gold.sql"
+            DB_DIR="./dataset/spider/test_database"
+            TABLE_FILE="./dataset/spider/test_tables.json"
+            MCTS_RESULT="./mcts_results/spider_mcts_test.json"
+        else
+            GOLD_FILE="./dataset/spider/train_gold.sql"
+            DB_DIR="./dataset/spider/database"
+            TABLE_FILE="./dataset/spider/tables.json"
+            MCTS_RESULT="./mcts_results/spider_train_mcts_train.json"
+        fi
+
+        # Run fix_sql_file.py to ensure SQL file is compatible with evaluation
+        python fix_sql_file.py "$OUTPUT_FILE" "$GOLD_FILE" "$MCTS_RESULT"
+        
+        echo "Evaluating $OUTPUT_FILE with Spider test suite..."
+        echo "========================================================"
+        python test-suite-sql-eval/evaluation.py \
+            --gold "$GOLD_FILE" \
+            --pred "$OUTPUT_FILE" \
+            --db "$DB_DIR" \
+            --table "$TABLE_FILE" \
+            --etype all
+        echo "========================================================"
+        echo "Evaluation for $CURRENT_MODE mode completed."
+        echo "========================================================"
+    else
+        echo "Warning: $OUTPUT_FILE not found, skipping evaluation."
+    fi
+    
+    # Handle Bird dataset evaluation if applicable
+    if [ "$DATASET" == "bird" ] && [ -f "$OUTPUT_FILE" ]; then
+        echo "========================================================"
+        echo "Note: For Bird dataset, please use Bird's official evaluation script separately."
+        echo "The output file $OUTPUT_FILE has been generated successfully."
+        echo "========================================================"
+    fi
+    
+    echo "Results for $CURRENT_MODE mode saved to: $OUTPUT_FILE"
 done
 
 # Clean up
@@ -297,5 +336,12 @@ bash kill_llm_api.sh
 
 echo "========================================================"
 echo "SQL-o1 execution with Groq completed!"
-echo "Results can be found in: $OUTPUT_FILE"
+echo "Results can be found in the following files based on selected modes:"
+for CURRENT_MODE in "${MODES[@]}"; do
+    if [ "$DATASET" == "bird" ]; then
+        echo "- bird_${CURRENT_MODE}.sql"
+    elif [ "$DATASET" == "spider" ]; then
+        echo "- spider_${CURRENT_MODE}.sql"
+    fi
+done
 echo "========================================================"

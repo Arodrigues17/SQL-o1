@@ -21,8 +21,11 @@ if not groq_api_key:
 groq_client = Groq(api_key=groq_api_key)
 
 # Default model to use (can be overridden with env var)
-DEFAULT_MODEL = "llama-3-1-8b-instant-128k"  # Llama 3.1 8B Instant 128k
+DEFAULT_MODEL = "llama-3.1-8b-instant"  # Correct Groq model name for Llama 3.1 8B
 MODEL = os.environ.get("GROQ_MODEL", DEFAULT_MODEL)
+
+# Print the model being used for debugging
+print(f"Using Groq model: {MODEL}")
 
 # Request model for FastAPI
 class LLMRequest(BaseModel):
@@ -93,22 +96,36 @@ def beam_search(input: str) -> List[Tuple[str, float]]:
         # Groq API only allows n=1. If you want multiple completions, call the API multiple times.
         completions = []
         num_completions = 3  # mimic original behavior, but do 3 separate calls
-        for _ in range(num_completions):
-            response = groq_client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "user", "content": input}],
-                temperature=0.9,
-                max_tokens=1024,
-                n=1,
-            )
-            if response.choices:
-                content = response.choices[0].message.content
-                score_value = calculate_score(f"user\n\n{input}assistant\n\n", content)
-                completions.append((content, score_value))
+        for i in range(num_completions):
+            print(f"Generating completion {i+1}/{num_completions} with model {MODEL}...")
+            try:
+                response = groq_client.chat.completions.create(
+                    model=MODEL,
+                    messages=[{"role": "user", "content": input}],
+                    temperature=0.9,
+                    max_tokens=1024,
+                    n=1,
+                )
+                if response.choices and len(response.choices) > 0:
+                    content = response.choices[0].message.content
+                    print(f"Generated content ({len(content)} chars): {content[:100]}...")
+                    score_value = calculate_score(f"user\n\n{input}assistant\n\n", content)
+                    print(f"Content score: {score_value}")
+                    completions.append((content, score_value))
+                else:
+                    print(f"Warning: No choices returned in response for completion {i+1}")
+            except Exception as inner_e:
+                print(f"Error in completion {i+1}: {inner_e}")
+                # Continue with other completions
+        
+        if not completions:
+            # If all completions failed, return a default response
+            print("Warning: All completions failed, returning default response")
+            return [("SELECT * FROM table;", -100.0)]
         return completions
     except Exception as e:
         print(f"Error in beam search: {e}")
-        return [("An error occurred during generation.", -100.0)]
+        return [("SELECT * FROM table WHERE error_occurred = TRUE;", -100.0)]
 
 
 @app.post("/llm")

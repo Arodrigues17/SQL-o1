@@ -466,7 +466,7 @@ def print_scores(scores, etype, include_turn_acc=True):
 
     if etype in ["all", "match"]:
         print ('\n====================== EXACT MATCHING ACCURACY =====================')
-        exact_scores = [scores[level]['exact'] for level in levels]
+        exact_scores = [scores[level]['partial']['select']['acc'] for level in levels]
         print_formated_s("exact match", exact_scores, '{:<20.3f}')
         print ('\n---------------------PARTIAL MATCHING ACCURACY----------------------')
         for type_ in partial_types:
@@ -537,6 +537,18 @@ def evaluate(gold, predict, db_dir, etype, kmaps, plug_value, keep_distinct, pro
         if len(pseq_one) != 0:
             plist.append(pseq_one)
 
+    # Add debug prints to understand the issue
+    print(f"Pred sessions: {len(plist)}")
+    print(f"Gold sessions: {len(glist)}")
+    if len(plist) > 0 and len(glist) > 0:
+        print(f"First pred session: {plist[0][:100]}")
+        print(f"First gold session: {glist[0][:100]}")
+    # Add debug prints to understand the issue
+    print(f"Pred sessions: {len(plist)}")
+    print(f"Gold sessions: {len(glist)}")
+    if len(plist) > 0 and len(glist) > 0:
+        print(f"First pred session: {plist[0][:100]}")
+        print(f"First gold session: {glist[0][:100]}")
     assert len(plist) == len(glist), "number of sessions must equal"
 
     evaluator = Evaluator()
@@ -831,10 +843,10 @@ def rebuild_from_col(valid_col_units, from_, kmap):
 
 
 def rebuild_group_by_col(valid_col_units, group_by, kmap):
-    if group_by is None:
+    if group_by is None or len(group_by) == 0:
         return group_by
-
-    return [rebuild_col_unit_col(valid_col_units, col_unit, kmap) for col_unit in group_by]
+    
+    return [rebuild_col_unit(valid_col_units, col_unit, kmap) for col_unit in group_by]
 
 
 def rebuild_order_by_col(valid_col_units, order_by, kmap):

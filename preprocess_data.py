@@ -538,20 +538,11 @@ def eval_all(args):
             database_schema, examples = get_schmea_str_and_examples(schema_dict)
             schema_dict_ = schema_dict
 
-            # --- Enhanced schema linking ---
-            linked_columns, linked_tables = extract_schema_links(question, schema_dict)
-            # Format as tags
-            col_tags = ' '.join([f"<col>{col}</col>" for _, col in linked_columns])
-            tab_tags = ' '.join([f"<tab>{tab}</tab>" for tab in linked_tables])
-            schema_linking_context = f"Schema links: {col_tags} {tab_tags}" if (col_tags or tab_tags) else ""
-            # ---
-
             if dataset == 'bird':
                 prompt = [question, schema_dict,
                           f"\n\n/* Question hint */\n{row['evidence']}" if row['evidence'] != '' else '', schema_dict_]
             else:
-                # Insert schema linking context into the prompt
-                prompt = [question + "\n" + schema_linking_context, schema_dict, '', schema_dict_]
+                prompt = [question, schema_dict, '', schema_dict_]
             prompts.append([database_schema, str(examples), question, row['SQL'], db_id, prompt, db_path])
 
         n_samples = len(data_tuples)
